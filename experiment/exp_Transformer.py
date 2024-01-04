@@ -6,10 +6,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import wandb
 from torch.optim import lr_scheduler
 
-from exp.exp_basic import Exp_Basic
-from models import Transformer
+from experiment.exp_basic import ExperimentBasic
+from models import Informer, Transformer
 from utils.data.data_factory import data_provider
 from utils.metrics import metrics
 from utils.tools import (EarlyStopping, Timer, adjust_learning_rate,
@@ -18,27 +19,30 @@ from utils.tools import (EarlyStopping, Timer, adjust_learning_rate,
 warnings.filterwarnings('ignore')
 
 
-class Exp_Transformer(Exp_Basic):
-    def __init__(self, args):
-        super().__init__(args)
+
+
+class Exp_Transformer(ExperimentBasic):
+    def __init__(self, config):
+        super().__init__(config)
 
     def _build_model(self):
-        model_dict = {
-            'Transformer': Transformer
+        models = {
+            'Transformer': Transformer,
+            'Informer': Informer,
         }
-        model = model_dict[self.args.model].Model(self.args).float()
+        model = models.get(self.config.model, Transformer).Model(
+            self.config).float()
 
-        if self.args.use_gpu and self.args.use_multi_gpu:
-            model = nn.DataParallel(model, device_ids=self.args.device_ids)
-        return model
+        if self.config.use_gpu and self.config.use_multi_gpu:
+            model = nn.DataParallel(model, device_ids=self.config.devices)
+        self.model = model
 
-    def _get_data(self, flag):
-        data_set, data_loader = data_provider(self.args, flag)
+    def _load_data(self, data_type):
+        data_set, data_loader = data_provider(self.config, data_type)
         return data_set, data_loader
 
     def _get_optimizer(self):
-        optimizer = optim.Adam(self.model.parameters(),
-                               lr=self.args.learning_rate)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.config.lr)
         return optimizer
 
     def _get_criterion(self):
@@ -46,35 +50,34 @@ class Exp_Transformer(Exp_Basic):
         return criterion
 
     def train(self, setting):
-        train_data, train_loader = self._get_data('train')
-        val_data, val_loader = self._get_data('val')
-        test_data, test_loader = self._get_data('test')
+        _, train_loader = self._load_data('train')
+        val_data, val_loader = self._load_data('val')
+        test_data, test_loader = self._load_data('test')
 
-        path = os.path.join(self.args.checkpoints, setting)
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        train_steps = len(train_loader)  # 一个epoch的迭代次数
+        train_steps_per_epoch = len(train_loader)
         early_stopping = EarlyStopping(
-            patience=self.args.patience, verbose=True)
+            patience=self.config.patience, verbose=True)
 
         optimizer = self._get_optimizer()
         criterion = self._get_criterion()
 
-        if self.args.use_amp:
+        if self.config.use_amp:
             scaler = torch.cuda.amp.GradScaler()
+            
+        model_save_path = os.path.join(self.config.checkpoints, setting)
 
-        scheduler = lr_scheduler.OneCycleLR(optimizer=optimizer, steps_per_epoch=train_steps,
-                                            pct_start=self.args.pct_start, max_lr=self.args.learning_rate,
-                                            epochs=self.args.train_epochs)
+        scheduler = lr_scheduler.OneCycleLR(optimizer=optimizer, steps_per_epoch=train_steps_per_epoch,
+                                            pct_start=self.config.pct_start, max_lr=self.config.lr,
+                                            epochs=self.config.epochs)
+
+        wandb.watch(self.model, criterion, log='all', log_freq=10)
 
         epoch_timer = Timer()
         epoch_timer.start()
-        for epoch in range(self.args.train_epochs):
+        for epoch in range(self.config.epochs):
             iter_count = 0
             train_loss = []
 
-            self.model.train()
             epoch_time = time.time()
             iter_timer = Timer()
             iter_timer.start()
@@ -83,26 +86,15 @@ class Exp_Transformer(Exp_Basic):
                 iter_count += 1
                 optimizer.zero_grad()
 
-                if self.args.use_amp:
+                if self.config.use_amp:
                     with torch.cuda.amp.autocast():
-                        outputs = self.infer(
-                            batch_x, batch_y, batch_x_mark, batch_y_mark)
-
-                        f_dim = -1 if self.args.features == 'MS' else 0
-                        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                        batch_y = batch_y[:, -self.args.pred_len:,
-                                          f_dim:].float().to(self.device)
-                        loss = criterion(outputs, batch_y)
+                        _, _, loss = self.calculate_one_batch(
+                            batch_x, batch_x_mark, batch_y, batch_y_mark, criterion, mode='train')
                         train_loss.append(loss.item())
 
                 else:
-                    outputs = self.infer(
-                        batch_x, batch_y, batch_x_mark, batch_y_mark)
-                    f_dim = -1 if self.args.features == 'MS' else 0
-                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                    batch_y = batch_y[:, -self.args.pred_len:,
-                                      f_dim:].float().to(self.device)
-                    loss = criterion(outputs, batch_y)
+                    _, _, loss = self.calculate_one_batch(
+                        batch_x, batch_x_mark, batch_y, batch_y_mark, criterion, mode='train')
                     train_loss.append(loss.item())
 
                 if (i + 1) % 10 == 0:
@@ -110,7 +102,8 @@ class Exp_Transformer(Exp_Basic):
                         i + 1, epoch + 1, loss.item()))
                     speed = iter_timer.stop() / iter_count
                     left_time = speed * \
-                        ((self.args.train_epochs - epoch) * train_steps - i)
+                        ((self.config.train_epochs - epoch)
+                         * train_steps_per_epoch - i)
                     left_hours = int(left_time // 3600)
                     left_minutes = int(left_time - 3600 * left_hours) // 60
                     left_seconds = int(left_time - 3600 *
@@ -120,7 +113,7 @@ class Exp_Transformer(Exp_Basic):
                     iter_count = 0
                     iter_timer.start()
 
-                if self.args.use_amp:
+                if self.config.use_amp:
                     scaler.scale(loss).backward()
                     scaler.step(optimizer)
                     scaler.update()
@@ -128,9 +121,9 @@ class Exp_Transformer(Exp_Basic):
                     loss.backward()
                     optimizer.step()
 
-                if self.args.lradj == 'TST':
+                if self.config.lradj == 'TST':
                     adjust_learning_rate(
-                        optimizer, scheduler, epoch + 1, self.args, printout=False)
+                        optimizer, scheduler, epoch + 1, self.config, printout=False)
                     scheduler.step()
 
             print(f"Epoch: {epoch + 1} cost time: {epoch_timer.stop()}s")
@@ -138,51 +131,41 @@ class Exp_Transformer(Exp_Basic):
             val_loss = self.validate(val_data, val_loader, criterion)
             test_loss = self.validate(test_data, test_loader, criterion)
 
+            wandb.log({'epoch': epoch, 'train_loss': train_loss,
+                      'val_loss': val_loss, 'test_loss': test_loss})
+
             epoch_timer.start()
 
             print("Epoch: {}, Steps: {} | train_loss: {:.7f}, val_loss: {:.7f}, test_loss: {:.7f}".format(
-                epoch + 1, train_steps, train_loss, val_loss, test_loss))
-            early_stopping(val_loss, self.model, path)
+                epoch + 1, train_steps_per_epoch, train_loss, val_loss, test_loss))
+            early_stopping(val_loss, self.model, model_save_path)
             if early_stopping.early_stop:
-                print("早停已出发，已停止训练")
+                print("提前停止训练")
                 break
 
-            if self.args.lradj != 'TST':
+            if self.config.lradj != 'TST':
                 adjust_learning_rate(optimizer, scheduler,
-                                     epoch + 1, self.args)
+                                     epoch + 1, self.config)
             else:
                 print(f'更新学习率为： {scheduler.get_last_lr()[0]}')
 
-        best_model_path = path + '/' + 'checkpoint.pth'
+        best_model_path = model_save_path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
 
         return self.model
 
     def validate(self, val_data, val_loader, criterion):
         total_loss = []
-        self.model.eval()
-        with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(val_loader):
-
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        outputs = self.infer(
-                            batch_x, batch_y, batch_x_mark, batch_y_mark)
-                else:
-                    outputs = self.infer(
-                        batch_x, batch_y, batch_x_mark, batch_y_mark)
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:,
-                                  f_dim:].to(self.device)
-
-                pred = outputs.detach().cpu()
-                true = batch_y.detach().cpu()
-
-                loss = criterion(pred, true)
-                total_loss.append(loss)
+        for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(val_loader):
+            if self.config.use_amp:
+                with torch.cuda.amp.autocast():
+                    pred, true, loss = self.calculate_one_batch(
+                        batch_x, batch_x_mark, batch_y, batch_y_mark, criterion, mode='val')
+            else:
+                pred, true, loss = self.calculate_one_batch(
+                    batch_x, batch_x_mark, batch_y, batch_y_mark, criterion, mode='val')
+            total_loss.append(loss)
         total_loss = np.average(total_loss)
-        self.model.train()
         return total_loss
 
     def test(self, setting, test=0):
@@ -204,7 +187,7 @@ class Exp_Transformer(Exp_Basic):
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
 
-                if self.args.use_amp:
+                if self.config.use_amp:
                     with torch.cuda.amp.autocast():
                         outputs = self.infer(
                             batch_x, batch_y, batch_x_mark, batch_y_mark)
@@ -212,9 +195,9 @@ class Exp_Transformer(Exp_Basic):
                     outputs = self.infer(
                         batch_x, batch_y, batch_x_mark, batch_y_mark)
 
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:,
+                f_dim = -1 if self.config.features == 'MS' else 0
+                outputs = outputs[:, -self.config.pred_len:, f_dim:]
+                batch_y = batch_y[:, -self.config.pred_len:,
                                   f_dim:].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
@@ -232,7 +215,7 @@ class Exp_Transformer(Exp_Basic):
                     pd = np.concatenate(
                         (input[0, :, -1], pred[0, :, -1]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
-        if self.args.test_flop:
+        if self.config.test_flop:
             test_params_flop(self.model, (batch_x.shape[1], batch_x.shape[2]))
             exit()
         preds = np.array(preds)
@@ -261,7 +244,7 @@ class Exp_Transformer(Exp_Basic):
         pred_data, pred_loader = self._get_data('pred')
 
         if load:
-            path = os.path.join(self.args.checkpoints, setting)
+            path = os.path.join(self.config.checkpoints, setting)
             best_model_path = path + '/' + 'checkpoint.pth'
             self.model.load_state_dict(torch.load(best_model_path))
 
@@ -271,7 +254,7 @@ class Exp_Transformer(Exp_Basic):
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(pred_loader):
                 # encoder - decoder
-                if self.args.use_amp:
+                if self.config.use_amp:
                     with torch.cuda.amp.autocast():
                         outputs = self.infer(
                             batch_x, batch_y, batch_x_mark, batch_y_mark)
@@ -295,18 +278,76 @@ class Exp_Transformer(Exp_Basic):
         x_mark = x_mark.float().to(self.device)
         y_mark = y_mark.float().to(self.device)
 
-        dec_input = torch.zeros_like(y[:, -self.args.pred_len:, :]).float()
+        dec_input = torch.zeros_like(y[:, -self.config.pred_len:, :]).float()
         dec_input = torch.cat(
-            [y[:, :self.args.label_len, :], dec_input], dim=1).float().to(self.device)
+            [y[:, :self.config.label_len, :], dec_input], dim=1).float().to(self.device)
 
-        if self.args.output_attention:
+        if self.config.output_attention:
             outputs = self.model(
                 x, x_mark, dec_input, y_mark)[0]
         else:
             outputs = self.model(
                 x, x_mark, dec_input, y_mark)
 
-        f_dim = -1 if self.args.features == 'MS' else 0
-        outputs = outputs[:, -self.args.pred_len:, f_dim:]
+        f_dim = -1 if self.config.features == 'MS' else 0
+        outputs = outputs[:, -self.config.pred_len:, f_dim:]
 
         return outputs
+
+    def calculate_one_batch(self, batch_x, batch_x_mark, batch_y, batch_y_mark, criterion, mode='train'):
+        if mode == 'train':
+            self.model.train()
+            batch_x = batch_x.float().to(self.device)
+            batch_x_mark = batch_x_mark.float().to(self.device)
+            batch_y = batch_y.float().to(self.device)
+            batch_y_mark = batch_y_mark.float().to(self.device)
+
+            dec_input = torch.zeros_like(
+                batch_y[:, -self.config.pred_len:, :]).float()
+            dec_input = torch.cat(
+                [batch_y[:, :self.config.label_len, :], dec_input], dim=1).float().to(self.device)
+
+            if self.config.output_attention:
+                outputs = self.model(batch_x, batch_x_mark,
+                                     dec_input, batch_y_mark)[0]
+            else:
+                outputs = self.model(batch_x, batch_x_mark,
+                                     dec_input, batch_y_mark)
+
+            f_dim = -1 if self.config.features == 'MS' else 0
+            outputs = outputs[:, -self.config.pred_len:, f_dim:]
+            batch_y = batch_y[:, -self.config.pred_len:,
+                              f_dim:].float().to(self.device)
+
+            loss = criterion(outputs, batch_y)
+
+            return outputs, batch_y, loss
+        else:
+            self.model.eval()
+            with torch.no_grad():
+                batch_x = batch_x.float().to(self.device)
+                batch_x_mark = batch_x_mark.float().to(self.device)
+                batch_y = batch_y.float().to(self.device)
+                batch_y_mark = batch_y_mark.float().to(self.device)
+
+                dec_input = torch.zeros_like(
+                    batch_y[:, -self.config.pred_len:, :]).float()
+                dec_input = torch.cat(
+                    [batch_y[:, :self.config.label_len, :], dec_input], dim=1).float().to(self.device)
+
+                if self.config.output_attention:
+                    outputs = self.model(
+                        batch_x, batch_x_mark, dec_input, batch_y_mark)[0]
+                else:
+                    outputs = self.model(
+                        batch_x, batch_x_mark, dec_input, batch_y_mark)
+
+                f_dim = -1 if self.config.features == 'MS' else 0
+                outputs = outputs[:, -self.config.pred_len:,
+                                  f_dim:].detach().cpu()
+                batch_y = batch_y[:, -self.config.pred_len:,
+                                  f_dim:].float().detach().cpu()
+
+                loss = criterion(outputs, batch_y)
+
+                return outputs, batch_y, loss
