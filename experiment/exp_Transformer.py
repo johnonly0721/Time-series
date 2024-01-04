@@ -13,8 +13,8 @@ from experiment.exp_basic import ExperimentBasic
 from models import Informer, Transformer
 from utils.data.data_factory import data_provider
 from utils.metrics import metrics
-from utils.tools import (EarlyStopping, Timer, adjust_learning_rate,
-                         test_params_flop, visual)
+from utils.tools import (EarlyStopping, Timer,
+                         adjust_learning_rate, test_params_flop, visual)
 
 warnings.filterwarnings('ignore')
 
