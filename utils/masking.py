@@ -26,9 +26,7 @@ class ProbMask():
     """
     def __init__(self, B, H, L, index, scores, device='cpu'):
         _mask = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(device).triu(1) # Upper triangular part of a matrix(2-D tensor) is zero
-        print(_mask.shape)
         _mask_ex = _mask[None, None, :].expand(B, H, L, scores.shape[-1]) # Expand the mask to the same shape as scores
-        print(_mask_ex.shape)
         indicator = _mask_ex[torch.arange(B)[:, None, None],
                                      torch.arange(H)[None, :, None], 
                                      index, :].to(device) #

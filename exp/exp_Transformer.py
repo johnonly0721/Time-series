@@ -91,7 +91,7 @@ class Exp_Transformer(Exp_Basic):
                         f_dim = -1 if self.args.features == 'MS' else 0
                         outputs = outputs[:, -self.args.pred_len:, f_dim:]
                         batch_y = batch_y[:, -self.args.pred_len:,
-                                          f_dim:].to(self.device)
+                                          f_dim:].float().to(self.device)
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
 
@@ -101,7 +101,7 @@ class Exp_Transformer(Exp_Basic):
                     f_dim = -1 if self.args.features == 'MS' else 0
                     outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     batch_y = batch_y[:, -self.args.pred_len:,
-                                      f_dim:].to(self.device)
+                                      f_dim:].float().to(self.device)
                     loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
 
@@ -228,9 +228,9 @@ class Exp_Transformer(Exp_Basic):
                 if i % 20 == 0:
                     input = batch_x.detach().cpu().numpy()
                     gt = np.concatenate(
-                        (input[0, :, -1], true[0, :, -1]), axis=1)
+                        (input[0, :, -1], true[0, :, -1]), axis=0)
                     pd = np.concatenate(
-                        (input[0, :, -1], pred[0, :, -1]), axis=1)
+                        (input[0, :, -1], pred[0, :, -1]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
         if self.args.test_flop:
             test_params_flop(self.model, (batch_x.shape[1], batch_x.shape[2]))
@@ -304,7 +304,7 @@ class Exp_Transformer(Exp_Basic):
                 x, x_mark, dec_input, y_mark)[0]
         else:
             outputs = self.model(
-                x, x, dec_input, y_mark)
+                x, x_mark, dec_input, y_mark)
 
         f_dim = -1 if self.args.features == 'MS' else 0
         outputs = outputs[:, -self.args.pred_len:, f_dim:]

@@ -1,15 +1,7 @@
 import torch.nn as nn
-
-from layers.Transformer_layers.embeddings import (DataEmbedding,
-                                                  DataEmbeddingNoPosAndTemp,
-                                                  DataEmbeddingNoPosition,
-                                                  DataEmbeddingNoTemporal)
-from layers.Transformer_layers.self_attentions import (AttentionLayer,
-                                                       FullAttention)
-from layers.Transformer_layers.Transformer_EncDec import (Decoder,
-                                                          DecoderLayer,
-                                                          Encoder,
-                                                          EncoderLayer)
+from layers.Transformer_layers.Transformer_EncDec import Encoder, EncoderLayer, Decoder, DecoderLayer, ConvLayer
+from layers.Transformer_layers.self_attentions import ProbAttention, AttentionLayer
+from layers.Transformer_layers.embeddings import DataEmbedding, DataEmbeddingNoPosition, DataEmbeddingNoTemporal, DataEmbeddingNoPosAndTemp
 
 
 class Model(nn.Module):
@@ -30,12 +22,11 @@ class Model(nn.Module):
         self.dec_embedding = emb_map[configs.embedding_type](
             configs.dec_input, configs.d_model, configs.embedding, configs.freq, configs.dropout)
 
-        # 编码器
         self.encoder = Encoder(
             layers=[
                 EncoderLayer(
                     attention_layer=AttentionLayer(
-                        attention=FullAttention(mask_flag=False, factor=configs.factor,
+                        attention=ProbAttention(mask_flag=False, factor=configs.factor,
                                                 attention_dropout=configs.dropout,
                                                 output_attention=configs.output_attention),
                         d_model=configs.d_model, n_heads=configs.n_heads
@@ -44,21 +35,25 @@ class Model(nn.Module):
                     dropout=configs.dropout, activation=configs.activation
                 ) for _ in range(configs.e_layers)
             ],
+            conv_layers=[
+                ConvLayer(
+                    c_in=configs.d_model
+                ) for _ in range(configs.e_layers - 1)
+            ] if configs.distil else None,
             norm_layer=nn.LayerNorm(configs.d_model)
         )
 
-        # 解码器
         self.decoder = Decoder(
             layers=[
                 DecoderLayer(
                     self_attention=AttentionLayer(
-                        attention=FullAttention(mask_flag=True, factor=configs.factor,
+                        attention=ProbAttention(mask_flag=True, factor=configs.factor,
                                                 attention_dropout=configs.dropout,
                                                 output_attention=False),
                         d_model=configs.d_model, n_heads=configs.n_heads
                     ),
                     cross_attention=AttentionLayer(
-                        attention=FullAttention(mask_flag=False, factor=configs.factor,
+                        attention=ProbAttention(mask_flag=False, factor=configs.factor,
                                                 attention_dropout=configs.dropout,
                                                 output_attention=False),
                         d_model=configs.d_model, n_heads=configs.n_heads
@@ -73,6 +68,7 @@ class Model(nn.Module):
 
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec,
                 enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
+
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=enc_self_mask)
 
