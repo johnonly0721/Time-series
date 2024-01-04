@@ -1,15 +1,15 @@
 import torch.nn as nn
 
-from layers.Transformer_layers.embeddings import (DataEmbedding,
-                                                  DataEmbeddingNoPosAndTemp,
-                                                  DataEmbeddingNoPosition,
-                                                  DataEmbeddingNoTemporal)
-from layers.Transformer_layers.self_attentions import (AttentionLayer,
-                                                       FullAttention)
-from layers.Transformer_layers.Transformer_EncDec import (Decoder,
-                                                          DecoderLayer,
-                                                          Encoder,
-                                                          EncoderLayer)
+from layers.Transformer.embeddings import (DataEmbedding,
+                                           DataEmbeddingNoPosAndTemp,
+                                           DataEmbeddingNoPosition,
+                                           DataEmbeddingNoTemporal)
+from layers.Transformer.attentions_layers import (AttentionLayer,
+                                                  FullAttention)
+from layers.Transformer.backbone import (Decoder,
+                                         DecoderLayer,
+                                         Encoder,
+                                         EncoderLayer)
 
 
 class Model(nn.Module):

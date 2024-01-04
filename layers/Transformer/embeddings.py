@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 import math
 
+from layers.Patch_TST.layers import sin_cos_pos_encoding
 
-class PositionalEmbedding(nn.Module):
+
+class SinCosPosEmbedding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super().__init__()
         pe = torch.zeros(max_len, d_model).float()  # (max_len, d_model)
@@ -17,7 +19,7 @@ class PositionalEmbedding(nn.Module):
         pe[:, 1::2] = torch.cos(position * div_term)
 
         pe = pe.unsqueeze(0)  # (1, max_len, d_model)
-        self.register_buffer('pe', pe)
+        self.pe = pe
 
     def forward(self, x):
         return self.pe[:, :x.size(1)]  # (1, seq_len, d_model)
@@ -27,22 +29,16 @@ class FixedEmbedding(nn.Module):
     def __init__(self, c_in, d_model) -> None:
         super().__init__()
 
-        w = torch.zeros(c_in, d_model, dtype=torch.float)  # (c_in, d_model)
-        w.requires_grad = False
-
-        position = torch.arange(0, c_in).unsqueeze(1)  # (c_in, 1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float(
-        ) * (-math.log(10000.0) / d_model))  # (d_model / 2)
-
-        w[:, 0::2] = torch.sin(position * div_term)
-        w[:, 1::2] = torch.cos(position * div_term)
+        sin_cos_pos_encoding = SinCosPosEmbedding(d_model)
+        w = sin_cos_pos_encoding.pe.squeeze()
 
         self.emb = nn.Embedding(c_in, d_model)
         self.emb.weight = nn.Parameter(w, requires_grad=False)
 
     def forward(self, x):
         return self.emb(x).detach()
-    
+
+
 class TemporalEmbedding(nn.Module):
     def __init__(self, d_model, embedding_type='fixed', freq='h') -> None:
         super().__init__()
@@ -87,6 +83,7 @@ class TimeFeatureEmbedding(nn.Module):
     def forward(self, x):
         return self.embedding(x)
 
+
 class TokenEmbedding(nn.Module):
     def __init__(self, c_in, d_model) -> None:
         super().__init__()
@@ -109,7 +106,7 @@ class DataEmbedding(nn.Module):
         super().__init__()
 
         self.value_embedding = TokenEmbedding(c_in, d_model)
-        self.position_embedding = PositionalEmbedding(d_model)
+        self.position_embedding = SinCosPosEmbedding(d_model)
         if embedding_type == 'timeF':
             self.temporal_embedding = TimeFeatureEmbedding(
                 d_model, embedding_type, freq)
@@ -147,7 +144,7 @@ class DataEmbeddingNoTemporal(nn.Module):
         super().__init__()
 
         self.value_embedding = TokenEmbedding(c_in, d_model)
-        self.position_embedding = PositionalEmbedding(d_model)
+        self.position_embedding = SinCosPosEmbedding()(d_model)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, x_mark):
