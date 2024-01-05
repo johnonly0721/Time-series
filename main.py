@@ -35,9 +35,9 @@ if __name__ == '__main__':
                         default='./checkpoints/', help='模型保存的文件夹路径')
 
     # 预测参数设置
-    parser.add_argument('--seq_len', type=int, default=96, help='输入序列长度')
-    parser.add_argument('--label_len', type=int, default=48, help='预测起始序列长度')
-    parser.add_argument('--pred_len', type=int, default=96, help='预测序列长度')
+    parser.add_argument('--seq_len', type=int, default=48, help='输入序列长度')
+    parser.add_argument('--label_len', type=int, default=24, help='预测起始序列长度')
+    parser.add_argument('--pred_len', type=int, default=48, help='预测序列长度')
 
     # Transformers系列模型参数设置
     parser.add_argument('--embedding_type', type=int, default=0,
@@ -48,8 +48,8 @@ if __name__ == '__main__':
     parser.add_argument('--c_out', type=int, default=1, help='输出特征维度')
     parser.add_argument('--d_model', type=int, default=512, help='模型特征维度')
     parser.add_argument('--n_heads', type=int, default=8, help='注意力头的数量')
-    parser.add_argument('--e_layers', type=int, default=1, help='编码层层数')
-    parser.add_argument('--d_layers', type=int, default=1, help='解码层层数')
+    parser.add_argument('--e_layers', type=int, default=4, help='编码层层数')
+    parser.add_argument('--d_layers', type=int, default=4, help='解码层层数')
     parser.add_argument('--d_ff', type=int, default=512, help='前馈网络特征嵌入维度')
     parser.add_argument('--moving_avg', type=int, default=25, help='移动平均的窗口大小')
     parser.add_argument('--factor', type=int, default=1,
@@ -71,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--itr', type=int, default=2, help='实验次数')
     parser.add_argument('--epochs', type=int, default=300, help='训练轮数')
     parser.add_argument('--batch_size', type=int,
-                        default=32, help='训练输入数据批量大小')
+                        default=64, help='训练输入数据批量大小')
     parser.add_argument('--patience', type=int, default=50, help='早停耐心值')
     parser.add_argument('--lr', type=float,
                         default=0.0001, help='优化器学习率')
@@ -85,7 +85,7 @@ if __name__ == '__main__':
                         help='use automatic mixed precision training', default=False)
 
     # GPU 设置
-    parser.add_argument('--use_gpu', type=bool, default=False, help='use gpu')
+    parser.add_argument('--use_gpu', type=bool, default=True, help='use gpu')
     parser.add_argument('--device_id', type=int, default=0, help='gpu')
     parser.add_argument('--use_multi_gpu', action='store_true',
                         help='use multiple gpus', default=False)
