@@ -110,7 +110,7 @@ if __name__ == '__main__':
     print('实验参数设置:')
     print(args)
 
-    Exp = Exp_Transformer(args)
+    Exp = Exp_Transformer
 
     if args.is_training:
         for ii in range(args.itr):
