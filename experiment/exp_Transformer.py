@@ -19,8 +19,6 @@ from utils.tools import (EarlyStopping, Timer,
 warnings.filterwarnings('ignore')
 
 
-
-
 class Exp_Transformer(ExperimentBasic):
     def __init__(self, config):
         super().__init__(config)
@@ -35,7 +33,7 @@ class Exp_Transformer(ExperimentBasic):
 
         if self.config.use_gpu and self.config.use_multi_gpu:
             model = nn.DataParallel(model, device_ids=self.config.devices)
-        self.model = model
+        self.model = model.to(self.device)
 
     def _load_data(self, data_type):
         data_set, data_loader = data_provider(self.config, data_type)
@@ -63,7 +61,7 @@ class Exp_Transformer(ExperimentBasic):
 
         if self.config.use_amp:
             scaler = torch.cuda.amp.GradScaler()
-            
+
         model_save_path = os.path.join(self.config.checkpoints, setting)
         if not os.path.exists(model_save_path):
             os.makedirs(model_save_path)
