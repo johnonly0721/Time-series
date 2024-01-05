@@ -65,6 +65,8 @@ class Exp_Transformer(ExperimentBasic):
             scaler = torch.cuda.amp.GradScaler()
             
         model_save_path = os.path.join(self.config.checkpoints, setting)
+        if not os.path.exists(model_save_path):
+            os.makedirs(model_save_path)
 
         scheduler = lr_scheduler.OneCycleLR(optimizer=optimizer, steps_per_epoch=train_steps_per_epoch,
                                             pct_start=self.config.pct_start, max_lr=self.config.lr,
