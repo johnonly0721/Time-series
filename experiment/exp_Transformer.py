@@ -131,7 +131,7 @@ class Exp_Transformer(ExperimentBasic):
             val_loss = self.validate(val_data, val_loader, criterion)
             test_loss = self.validate(test_data, test_loader, criterion)
 
-            wandb.log({'epoch': epoch, 'train_loss': train_loss,
+            wandb.log({'train_loss': train_loss,
                       'val_loss': val_loss, 'test_loss': test_loss})
 
             epoch_timer.start()
@@ -169,7 +169,7 @@ class Exp_Transformer(ExperimentBasic):
         return total_loss
 
     def test(self, setting, test=0):
-        test_data, test_loader = self._get_data('test')
+        test_data, test_loader = self._load_data('test')
 
         if test:
             print('加载模型...')
@@ -183,37 +183,29 @@ class Exp_Transformer(ExperimentBasic):
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
-        self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
 
                 if self.config.use_amp:
                     with torch.cuda.amp.autocast():
-                        outputs = self.infer(
-                            batch_x, batch_y, batch_x_mark, batch_y_mark)
+                        output, batch_y, _ = self.calculate_one_batch(
+                            batch_x, batch_x_mark, batch_y, batch_y_mark, criterion=None, mode='test')
                 else:
-                    outputs = self.infer(
-                        batch_x, batch_y, batch_x_mark, batch_y_mark)
+                    output, batch_y, _ = self.calculate_one_batch(
+                        batch_x, batch_x_mark, batch_y, batch_y_mark, criterion=None, mode='test')
 
-                f_dim = -1 if self.config.features == 'MS' else 0
-                outputs = outputs[:, -self.config.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.config.pred_len:,
-                                  f_dim:].to(self.device)
-                outputs = outputs.detach().cpu().numpy()
-                batch_y = batch_y.detach().cpu().numpy()
+                output = output.numpy()
+                batch_y = batch_y.numpy()
 
-                pred = outputs
-                true = batch_y
-
-                preds.append(pred)
-                trues.append(true)
+                preds.append(output)
+                trues.append(batch_y)
                 input_x.append(batch_x.detach().cpu().numpy())
                 if i % 20 == 0:
                     input = batch_x.detach().cpu().numpy()
                     gt = np.concatenate(
-                        (input[0, :, -1], true[0, :, -1]), axis=0)
+                        (input[0, :, -1], batch_y[0, :, -1]), axis=0)
                     pd = np.concatenate(
-                        (input[0, :, -1], pred[0, :, -1]), axis=0)
+                        (input[0, :, -1], batch_y[0, :, -1]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
         if self.config.test_flop:
             test_params_flop(self.model, (batch_x.shape[1], batch_x.shape[2]))
@@ -348,6 +340,9 @@ class Exp_Transformer(ExperimentBasic):
                 batch_y = batch_y[:, -self.config.pred_len:,
                                   f_dim:].float().detach().cpu()
 
-                loss = criterion(outputs, batch_y)
+                if criterion is not None:
+                    loss = criterion(outputs, batch_y)
+                else:
+                    loss = None
 
                 return outputs, batch_y, loss

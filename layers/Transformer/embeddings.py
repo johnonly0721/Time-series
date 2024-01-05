@@ -20,7 +20,7 @@ class SinCosPosEmbedding(nn.Module):
         self.pe = pe
 
     def forward(self, x):
-        return self.pe[:, :x.size(1)].to(x.device)  # (1, seq_len, d_model)
+        return self.pe[:, :x.size(1)]  # (1, seq_len, d_model)
 
 
 class FixedEmbedding(nn.Module):
@@ -116,7 +116,7 @@ class DataEmbedding(nn.Module):
     def forward(self, x, x_mark):
         ve = self.value_embedding(x)
         te = self.temporal_embedding(x_mark)
-        pe = self.position_embedding(x)
+        pe = self.position_embedding(x).to(x.device).detach()
         return self.dropout(x)
 
 
@@ -147,7 +147,7 @@ class DataEmbeddingNoTemporal(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, x_mark):
-        x = self.value_embedding(x) + self.position_embedding(x)
+        x = self.value_embedding(x) + self.position_embedding(x).to(x.device).detach()
         return self.dropout(x)
 
 
