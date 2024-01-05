@@ -121,7 +121,7 @@ class DataEmbedding(nn.Module):
         ve = self.value_embedding(x)
         te = self.temporal_embedding(x_mark)
         pe = self.position_embedding(x).to(x.device).detach()
-        return self.dropout(x)
+        return self.dropout(ve + te + pe)
 
 
 class DataEmbeddingNoPosition(nn.Module):
