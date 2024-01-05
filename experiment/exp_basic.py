@@ -8,7 +8,6 @@ class ExperimentBasic:
         self.config = config
         self._acquire_device()
         self._build_model()
-        self._load_data()
 
     def _acquire_device(self):
         if self.config.use_gpu:
