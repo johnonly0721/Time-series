@@ -1,7 +1,7 @@
 import torch.nn as nn
-from layers.Transformer_layers.Transformer_EncDec import Encoder, EncoderLayer, Decoder, DecoderLayer, ConvLayer
-from layers.Transformer_layers.self_attentions import ProbAttention, AttentionLayer
-from layers.Transformer_layers.embeddings import DataEmbedding, DataEmbeddingNoPosition, DataEmbeddingNoTemporal, DataEmbeddingNoPosAndTemp
+from layers.Transformer.backbone import Encoder, EncoderLayer, Decoder, DecoderLayer, ConvLayer
+from layers.Transformer.attentions_layers import ProbAttention, AttentionLayer
+from layers.Transformer.embeddings import DataEmbedding, DataEmbeddingNoPosition, DataEmbeddingNoTemporal, DataEmbeddingNoPosAndTemp
 
 
 class Model(nn.Module):
