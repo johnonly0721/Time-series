@@ -36,6 +36,7 @@ class FixedEmbedding(nn.Module):
         self.emb.weight = nn.Parameter(w, requires_grad=False)
 
     def forward(self, x):
+        print("1111111111111")
         return self.emb(x).detach()
 
 
@@ -116,9 +117,10 @@ class DataEmbedding(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, x_mark):
-        print(x.device, x_mark.device)
-        x = self.value_embedding(
-            x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
+        ve = self.value_embedding(x)
+        te = self.temporal_embedding(x_mark)
+        pe = self.position_embedding(x)
+        print(ve.device, te.device, pe.device)
         return self.dropout(x)
 
 
