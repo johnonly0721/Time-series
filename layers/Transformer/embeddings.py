@@ -4,7 +4,7 @@ import math
 
 
 class SinCosPosEmbedding(nn.Module):
-    def __init__(self, d_model, max_len=5000):
+    def __init__(self, d_model, max_len=5000, norm=False):
         super().__init__()
         pe = torch.zeros(max_len, d_model).float()  # (max_len, d_model)
         pe.requires_grad = False
@@ -15,6 +15,10 @@ class SinCosPosEmbedding(nn.Module):
         ) * (-math.log(10000.0) / d_model))  # (d_model / 2)
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
+        
+        if norm:
+            pe = pe - pe.mean()
+            pe = pe / (pe.std() * 10)
 
         pe = pe.unsqueeze(0)  # (1, max_len, d_model)
         self.pe = pe

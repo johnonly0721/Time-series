@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import time
+import torch.nn as nn
 
 plt.switch_backend('agg')
 
@@ -209,3 +210,12 @@ class Timer:
         st = self.start_time
         self.start_time = None
         return self.end_time - st
+    
+def get_activation_fn(activation):
+    if callable(activation):
+        return activation()
+    elif activation.lower() == 'relu':
+        return nn.ReLU()
+    elif activation.lower() == 'gelu':
+        return nn.GELU()
+    raise ValueError(f'{activation} 不可用。你可以使用 "relu", "gelu" 或者一个可调用的激活函数')

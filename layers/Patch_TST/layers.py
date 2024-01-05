@@ -6,16 +6,6 @@ import torch.nn as nn
 import math
 
 
-def get_activation_fn(activation):
-    if callable(activation):
-        return activation()
-    elif activation.lower() == 'relu':
-        return nn.ReLU()
-    elif activation.lower() == 'gelu':
-        return nn.GELU()
-    raise ValueError(f'{activation} 不可用。你可以使用 "relu", "gelu" 或者一个可调用的激活函数')
-
-
 class Transpose(nn.Module):
     def __init__(self, *dims, contiguous=False) -> None:
         super().__init__()
@@ -137,6 +127,7 @@ def coor2d_pos_encoding(seq_len, d_model, exp=False, norm=True, eps=1e-3, verbos
         cpe = cpe / (cpe.std() * 10)
     return cpe
 
+
 def coor1d_pos_encoding(seq_len, exp=False, norm=True):
     """
     生成一维坐标位置编码。
@@ -151,7 +142,8 @@ def coor1d_pos_encoding(seq_len, exp=False, norm=True):
     输出:
         - Tensor: 位置编码，其形状为 (seq_len, 1)。
     """
-    cpe = 2 * (torch.linspace(0, 1, seq_len).reshape(-1, 1) ** (.5 if exp else 1)) - 1
+    cpe = 2 * (torch.linspace(0, 1, seq_len).reshape(-1, 1)
+               ** (.5 if exp else 1)) - 1
     if norm:
         cpe = cpe - cpe.mean()
         cpe = cpe / (cpe.std() * 10)
