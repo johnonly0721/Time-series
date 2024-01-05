@@ -102,7 +102,7 @@ class Exp_Transformer(ExperimentBasic):
                         i + 1, epoch + 1, loss.item()))
                     speed = iter_timer.stop() / iter_count
                     left_time = speed * \
-                        ((self.config.train_epochs - epoch)
+                        ((self.config.epochs - epoch)
                          * train_steps_per_epoch - i)
                     left_hours = int(left_time // 3600)
                     left_minutes = int(left_time - 3600 * left_hours) // 60
