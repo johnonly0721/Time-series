@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import math
 
-from layers.Patch_TST.layers import sin_cos_pos_encoding
-
 
 class SinCosPosEmbedding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -22,7 +20,7 @@ class SinCosPosEmbedding(nn.Module):
         self.pe = pe
 
     def forward(self, x):
-        return self.pe[:, :x.size(1)]  # (1, seq_len, d_model)
+        return self.pe[:, :x.size(1)].to(x.device)  # (1, seq_len, d_model)
 
 
 class FixedEmbedding(nn.Module):
@@ -36,7 +34,6 @@ class FixedEmbedding(nn.Module):
         self.emb.weight = nn.Parameter(w, requires_grad=False)
 
     def forward(self, x):
-        print("1111111111111")
         return self.emb(x).detach()
 
 
@@ -120,7 +117,6 @@ class DataEmbedding(nn.Module):
         ve = self.value_embedding(x)
         te = self.temporal_embedding(x_mark)
         pe = self.position_embedding(x)
-        print(ve.device, te.device, pe.device)
         return self.dropout(x)
 
 
