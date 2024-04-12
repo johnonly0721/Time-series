@@ -1,5 +1,5 @@
 __all__ = ['Transpose', 'get_activation_fn', 'moving_avg', 'series_decomp',
-           'sin_cos_pos_encoding', 'Coord2dPosEncoding', 'Coord1dPosEncoding', 'positional_encoding']
+           'PositionalEncoding', 'SinCosPosEncoding', 'Coord2dPosEncoding', 'Coord1dPosEncoding', 'positional_encoding']
 
 import torch
 import torch.nn as nn
@@ -17,8 +17,16 @@ class Transpose(nn.Module):
         else:
             return x.transpose(*self.dims)
 
+def get_activation_fn(activation):
+    if callable(activation): return activation()
+    elif activation.lower() == 'relu':
+        return nn.ReLU()
+    elif activation.lower() == 'gelu':
+        return nn.GELU()
+    raise ValueError(f'{activation} is not available. You can use "relu", "gelu", or a callable') 
 
-class MovingAvg(nn.Module):
+
+class moving_avg(nn.Module):
     """实现了一个移动平均层，用于突出时间序列的趋势。
 
     移动平均是一种常用的时间序列数据平滑技术，主要用于减少随机波动和突出长期趋势。
@@ -52,7 +60,7 @@ class MovingAvg(nn.Module):
         return x
 
 
-class SeriesDecomp(nn.Module):
+class series_decomp(nn.Module):
     """
     时间序列分解模块，用于从原始时间序列中分离出趋势成分和残差成分。
 
@@ -71,7 +79,7 @@ class SeriesDecomp(nn.Module):
 
     def __init__(self, kernel_size):
         super().__init__()
-        self.moving_avg = MovingAvg(kernel_size, stride=1)
+        self.moving_avg = moving_avg(kernel_size, stride=1)
 
     def forward(self, x):
         ma = self.moving_avg(x)
@@ -79,19 +87,21 @@ class SeriesDecomp(nn.Module):
         return res, ma
 
 
-def sin_cos_pos_encoding(seq_len, d_model, norm=True):
-    pe = torch.zeros(seq_len, d_model)
-    position = torch.arange(0, seq_len).unsqueeze(1)
-    div_term = torch.exp(torch.arange(0, d_model, 2) *
-                         (-math.log(10000.0) / d_model))
+def PositionalEncoding(q_len, d_model, normalize=True):
+    pe = torch.zeros(q_len, d_model)
+    position = torch.arange(0, q_len).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
     pe[:, 0::2] = torch.sin(position * div_term)
     pe[:, 1::2] = torch.cos(position * div_term)
-    if norm:
+    if normalize:
         pe = pe - pe.mean()
         pe = pe / (pe.std() * 10)
+    return pe
+
+SinCosPosEncoding = PositionalEncoding
 
 
-def coor2d_pos_encoding(seq_len, d_model, exp=False, norm=True, eps=1e-3, verbose=False):
+def Coord2dPosEncoding(seq_len, d_model, exp=False, norm=True, eps=1e-3, verbose=False):
     """
     生成二维坐标位置编码。
 
@@ -128,7 +138,7 @@ def coor2d_pos_encoding(seq_len, d_model, exp=False, norm=True, eps=1e-3, verbos
     return cpe
 
 
-def coor1d_pos_encoding(seq_len, exp=False, norm=True):
+def Coord1dPosEncoding(seq_len, exp=False, norm=True):
     """
     生成一维坐标位置编码。
 
@@ -148,3 +158,35 @@ def coor1d_pos_encoding(seq_len, exp=False, norm=True):
         cpe = cpe - cpe.mean()
         cpe = cpe / (cpe.std() * 10)
     return cpe
+
+def positional_encoding(pe, learn_pe, q_len, d_model):
+    if pe == None:
+        W_pos = torch.empty((q_len, d_model))
+        nn.init.uniform_(W_pos, -0.02, 0.02)
+        learn_pe = False
+    elif pe == 'zero':
+        W_pos = torch.empty((q_len, 1))
+        nn.init.uniform_(W_pos, -0.02, 0.02)
+    elif pe == 'zeros':
+        W_pos = torch.empty((q_len, d_model))
+        nn.init.uniform_(W_pos, -0.02, 0.02)
+    elif pe == 'normal' or pe == 'gauss':
+        W_pos = torch.zeros((q_len, 1))
+        nn.init.normal_(W_pos, mean=0.0, std=0.1)
+    elif pe == 'uniform':
+        W_pos = torch.zeros((q_len, 1))
+        nn.init.uniform_(W_pos, a=0.0, b=0.1)
+    elif pe == 'lin1d':
+        W_pos = Coord1dPosEncoding(q_len, exp=False, norm=True)
+    elif pe == 'exp1d':
+        W_pos = Coord1dPosEncoding(q_len, exp=True, norm=True)
+    elif pe == 'lin2d':
+        W_pos = Coord2dPosEncoding(q_len, d_model, exp=False, norm=True)
+    elif pe == 'exp2d':
+        W_pos = Coord2dPosEncoding(q_len, d_model, exp=True, norm=True)
+    elif pe == 'sincos':
+        W_pos = PositionalEncoding(q_len, d_model, normalize=True)
+    else:
+        raise ValueError(f"{pe} is not a valid pe (positional encoder. Available types: 'gauss'=='normal', \
+        'zeros', 'zero', uniform', 'lin1d', 'exp1d', 'lin2d', 'exp2d', 'sincos', None.)")
+    return nn.Parameter(W_pos, requires_grad=learn_pe)

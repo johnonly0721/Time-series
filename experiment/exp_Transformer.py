@@ -10,7 +10,7 @@ import wandb
 from torch.optim import lr_scheduler
 
 from experiment.exp_basic import ExperimentBasic
-from models import Informer, Transformer
+from models import Informer, Transformer, PatchTST
 from utils.data.data_factory import data_provider
 from utils.metrics import metrics
 from utils.tools import (EarlyStopping, Timer,
@@ -27,6 +27,7 @@ class Exp_Transformer(ExperimentBasic):
         models = {
             'Transformer': Transformer,
             'Informer': Informer,
+            'PatchTST': PatchTST,
         }
         model = models.get(self.config.model, Transformer).Model(
             self.config).float()
